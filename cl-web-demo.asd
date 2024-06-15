@@ -3,6 +3,6 @@
   :license  "MIT"
   :version "0.0.1"
   :serial t
-  :depends-on (#:clack #:ningle #:spinneret #:alexandria)
+  :depends-on (#:clack #:ningle #:spinneret #:alexandria #:bknr.datastore)
   :components ((:file "package")
                (:file "cl-web-demo")))

@@ -2,9 +2,20 @@
 
 (defvar *app* (make-instance 'ningle:app))
 
-(defvar *contacts* '((:id 1 :name "John" :email "john@doe.com")
-                     (:id 2 :name "Matti" :email "matti@mattilainen.fi")))
+(defclass todo (bknr.datastore:store-object)
+  ((todo-id :accessor todo-id :initarg :todo-id)
+   (title :accessor todo-title :initarg :title))
+  (:metaclass bknr.datastore:persistent-class))
 
+
+(make-instance 'bknr.datastore:mp-store
+               :directory "~/bknr/tmp/object-store/"
+               :subsystems (list
+                            (make-instance
+                             'bknr.datastore:store-object-subsystem)))
+
+(defun get-todos ()
+  (bknr.datastore:store-objects-with-class 'todo))
 
 (defmacro main-layout (&body body)
   `(spinneret:with-html-string
@@ -14,38 +25,50 @@
        (:meta :charset "utf-8")
        (:meta :name "viewport" :content "width=device-width, initial-scale=1")
        (:script :src "https://unpkg.com/htmx.org@1.9.9")
-      (:body
-       (:section :class "container"
-                 (:div :class "row"
-                       ,@body)))))))
+       (:body
+        ,@body)))))
 
+(defun htmx-page-link (uri text &optional class)
+  (spinneret:with-html
+    (:a :href uri :data-hx-get uri :data-hx-push-url "true" :data-hx-target "body" :data-hx-swap "innerHTML" text)))
 
 (defun htmx-request? ()
   (let ((hx-header (gethash  "hx-request" (lack.request:request-headers ningle:*request*))))
-   (string= "true" hx-header)))
+    (string= "true" hx-header)))
 
 (defmacro htmx-layout (&body body)
   `(if (htmx-request?)
        (spinneret:with-html-string ,@body)
        (main-layout ,@body)))
 
+(defun todo-ui (tdd)
+  (spinneret:with-html (:li (todo-title tdd) )))
 
-(defun list-contacts ()
-  (spinneret:with-html (:ul)
-    (dolist (contact *contacts*)
-      (let ((get-route (format nil "/contact/~a" (getf contact :id))))
-        (:li (getf contact :name) (:button :data-hx-get get-route "muokkaa"))))))
+
+(defun todos-ui ()
+  (spinneret:with-html (:ul#todos
+                        (dolist (tdd (get-todos))
+                          (todo-ui tdd)))))
+
+(defun todo-add (title)
+  (let ((tdd (make-instance 'todo :title title)))
+    (todo-ui tdd)))
+
+(defun todo-add-form ()
+  (spinneret:with-html
+    (:form :data-hx-post "/todos" :data-hx-target "#todos" :data-hx-swap "beforeend"
+           (:input :name "title")
+           (:button :type "submit" "Submit"))))
 
 (setf (ningle:route *app* "/" :method :get)
       #'(lambda (params)
           (let ((headers (getf params :content-type)))
-            (main-layout (list-contacts)))))
+            (main-layout (todos-ui) (todo-add-form)))))
 
-
-(setf (ningle:route *app* "/contact/:id" :method :get)
+(setf (ningle:route *app* "/todos" :method :post)
       #'(lambda (params)
-          (let* ((id (parse-integer (cdr (assoc :id params))))
-                 (contact (find-if #'(lambda (c) (eq (getf c :id) id)) *contacts*)))
-            (htmx-layout (:div (getf contact :name) id)))))
+          (let ((req (lack.request:request-body-parameters ningle:*request*)))
+            (spinneret:with-html-string
+              (todo-add (cdr (assoc "title" req :test 'string=)))))))
 
 (clack:clackup *app*)

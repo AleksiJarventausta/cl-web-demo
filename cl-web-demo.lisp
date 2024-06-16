@@ -2,11 +2,21 @@
 
 (defvar *app* (make-instance 'ningle:app))
 
+
 (defclass todo (bknr.datastore:store-object)
   ((todo-id :accessor todo-id :initarg :todo-id)
    (title :accessor todo-title :initarg :title))
   (:metaclass bknr.datastore:persistent-class))
 
+(defun create-styles()
+  (with-open-file (str (asdf:system-relative-pathname :cl-web-demo "static-files/main.css")
+                     :direction :output
+                     :If-does-not-exist :create
+                     :if-exists :supersede)
+  (format str (lass:compile-and-write
+   '(body
+     :background "pink"
+     )))))
 
 (make-instance 'bknr.datastore:mp-store
                :directory "~/bknr/tmp/object-store/"
@@ -14,20 +24,23 @@
                             (make-instance
                              'bknr.datastore:store-object-subsystem)))
 
+
 (defun get-todos ()
   (bknr.datastore:store-objects-with-class 'todo))
 
 (defmacro main-layout (&body body)
+  (let* ((css-mtime (sb-posix:stat-mtime (sb-posix:stat (asdf:system-relative-pathname :cl-web-demo "static-files/main.css"))))
+        (css-href (format nil "/public/main.css?modified=~a" css-mtime)))
   `(spinneret:with-html-string
      (:doctype)
      (:html
       (:head
        (:meta :charset "utf-8")
        (:meta :name "viewport" :content "width=device-width, initial-scale=1")
-       (:link :rel "stylesheet" :href "/public/main.css")
-       (:script :src "https://unpkg.com/htmx.org@1.9.9"))
+       (:link :rel "stylesheet" :href ,css-href)
+       (:script :src "/public/htmx.min.js"))
        (:body
-        ,@body))))
+        ,@body)))))
 
 (defun htmx-page-link (uri text &optional class)
   (spinneret:with-html
@@ -64,9 +77,7 @@
 
 (setf (ningle:route *app* "/" :method :get)
       #'(lambda (params)
-          (let ((headers (getf params :content-type))
-                )
-            (main-layout (todos-ui) (todo-add-form)))))
+            (main-layout (todos-ui) (todo-add-form))))
 
 (setf (ningle:route *app* "/todos" :method :post)
       #'(lambda (params)

@@ -1,2 +1,2 @@
 (defpackage #:cl-web-demo
-  (:use #:cl))
+  (:use #:cl #:lack.middleware.csrf))

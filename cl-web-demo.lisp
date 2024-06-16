@@ -24,9 +24,10 @@
       (:head
        (:meta :charset "utf-8")
        (:meta :name "viewport" :content "width=device-width, initial-scale=1")
-       (:script :src "https://unpkg.com/htmx.org@1.9.9")
+       (:link :rel "stylesheet" :href "/public/main.css")
+       (:script :src "https://unpkg.com/htmx.org@1.9.9"))
        (:body
-        ,@body)))))
+        ,@body))))
 
 (defun htmx-page-link (uri text &optional class)
   (spinneret:with-html
@@ -58,11 +59,13 @@
   (spinneret:with-html
     (:form :data-hx-post "/todos" :data-hx-target "#todos" :data-hx-swap "beforeend"
            (:input :name "title")
+           (:raw (lack.middleware.csrf:csrf-html-tag ningle:*session*))
            (:button :type "submit" "Submit"))))
 
 (setf (ningle:route *app* "/" :method :get)
       #'(lambda (params)
-          (let ((headers (getf params :content-type)))
+          (let ((headers (getf params :content-type))
+                )
             (main-layout (todos-ui) (todo-add-form)))))
 
 (setf (ningle:route *app* "/todos" :method :post)
@@ -71,4 +74,10 @@
             (spinneret:with-html-string
               (todo-add (cdr (assoc "title" req :test 'string=)))))))
 
-(clack:clackup *app*)
+(clack:clackup
+      (lack:builder
+       :session
+       :csrf
+       (:static :path "/public/"
+                :root (asdf:system-relative-pathname :cl-web-demo #P"static-files/"))
+      *app*))

@@ -1,28 +1,22 @@
 
 (in-package :cl-user)
 (uiop:define-package :cl-web-demo
-  (:use :cl :lack.middleware.csrf :cl-web-demo/types)
-  (:export #:start)
-  )
+  (:use :cl :lack.middleware.csrf)
+  (:import-from :cl-web-demo/types
+                #:todo
+
+                #:todo-id
+                #:todo-title)
+  (:export #:start))
 (in-package :cl-web-demo)
 
 (defvar *server* nil )
-(defvar *store* nil )
 (defvar *app* (make-instance 'ningle:app))
 
-(defun create-styles()
-  (with-open-file (str (asdf:system-relative-pathname :cl-web-demo "static-files/main.css")
-                       :direction :output
-                       :If-does-not-exist :create
-                       :if-exists :supersede)
-    (format str (lass:compile-and-write
-                 '(body
-                   :background "pink"
-                   )))))
 
 
 (defun get-todos ()
-  (bknr.datastore:store-objects-with-class 'todo))
+  (mito:select-dao 'todo ))
 
 (defmacro main-layout (&body body)
   (let* ((css-mtime (sb-posix:stat-mtime (sb-posix:stat (asdf:system-relative-pathname :cl-web-demo "static-files/main.css"))))
@@ -35,7 +29,7 @@
          (:meta :name "viewport" :content "width=device-width, initial-scale=1")
          (:link :rel "stylesheet" :href ,css-href)
          (:script :src "/public/htmx.min.js"))
-        (:body
+        (:body :data-hx-headers (format nil "{\"X-CSRF-TOKEN\": \" ~a \"}" (csrf-token ningle:*session*))
          ,@body)))))
 
 (defun htmx-page-link (uri text &optional class)
@@ -51,25 +45,31 @@
        (spinneret:with-html-string ,@body)
        (main-layout ,@body)))
 
-(defun todo-ui (tdd)
-  (spinneret:with-html (:li (todo-title tdd) )))
+(defun todo-ui (todo)
+  (spinneret:with-html
+    (:li (todo-title todo)
+         (:button :data-hx-delete (format nil "/todos/~a"
+                                          (mito:object-id todo)) "Delete") )))
 
 
 (defun todos-ui ()
   (spinneret:with-html (:ul#todos
-                        (dolist (tdd (get-todos))
-                          (todo-ui tdd)))))
+                        (dolist (todo (get-todos))
+                          (todo-ui todo)))))
 
 (defun todo-add (title)
-  (let ((tdd (make-instance 'todo :title title)))
-    (todo-ui tdd)))
+  (let ((todo (make-instance 'todo :title title)))
+    (mito:insert-dao todo)
+    (todo-ui todo)))
+
+(defun todo-delete (todo-id)
+  (bknr.datastore:delete-object (bknr.datastore:store-object-with-id todo-id)))
 
 (defun todo-add-form ()
   (spinneret:with-html
     (:form :data-hx-post "/todos" :data-hx-target "#todos" :data-hx-swap "beforeend"
            (:input :name "title")
-           (:raw (lack.middleware.csrf:csrf-html-tag ningle:*session*))
-           (:button :type "submit" "Submit"))))
+           (:button :type "submit" "Submiti"))))
 
 (setf (ningle:route *app* "/" :method :get)
       #'(lambda (params)
@@ -81,21 +81,21 @@
             (spinneret:with-html-string
               (todo-add (cdr (assoc "title" req :test 'string=)))))))
 
+(setf (ningle:route *app* "/todos/:id" :method :delete)
+      #'(lambda (params)
+          (let ((todo-id (parse-integer (cdr (assoc :id params)))))
+            (todo-delete todo-id)
+            (spinneret:with-html-string (:div "aa")))))
+
 (defun start (&key (port 5000))
   (when *server*
     (clack:stop *server*))
-  (when *store*
-    (bknr.datastore:close-store))
-  (setf *store* (make-instance 'bknr.datastore:mp-store
-                               :directory "~/bknr/tmp/object-store/"
-                               :subsystems (list
-                                            (make-instance
-                                             'bknr.datastore:store-object-subsystem))))
   (setf *server*
         (clack:clackup
          (lack:builder
           :session
-          :csrf
+          (:csrf :header-name "X-CSRF-TOKEN")
           (:static :path "/public/"
                    :root (asdf:system-relative-pathname :cl-web-demo #P"static-files/"))
+          (:mito '(:sqlite3 :database-name #P"/tmp/db.db"))
           *app*))))

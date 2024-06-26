@@ -6,5 +6,6 @@
   :serial t
   :depends-on (#:clack #:ningle #:spinneret #:alexandria "snooze" #:bknr.datastore "lack-middleware-csrf" "mito")
   :components ((:file "types")
+               (:file "db")
                (:file "ui-utils")
                (:file "cl-web-demo")))

@@ -2,10 +2,12 @@
 (in-package :cl-user)
 (uiop:define-package :cl-web-demo
   (:use :cl :lack.middleware.csrf)
+  (:LOCAL-NICKNAMES (#:db #:cl-web-demo/db))
   (:import-from :snooze
                 #:*clack-request-env*
                 #:defresource
                 #:defroute)
+
   (:import-from :cl-web-demo/types
                 #:recipe
                 #:recipe-name)
@@ -24,8 +26,6 @@
 
 (defresource recipes (verb ct &optional id &key edit) (:genpath recipes-path))
 
-(defun get-recipes ()
-  (mito:select-dao 'recipe ))
 
 (defun get-css (name)
   (let ((css-mtime (sb-posix:stat-mtime (sb-posix:stat (asdf:system-relative-pathname :cl-web-demo (format nil "static-files/~a.css" name))))))
@@ -33,8 +33,7 @@
 
 (defmacro main-layout (&body body)
   (let ((main-css (get-css "main"))
-        (missing-css (get-css "missing.min"))
-        )
+        (missing-css (get-css "missing.min")))
     `(spinneret:with-html-string
        (:doctype)
        (:html
@@ -70,18 +69,14 @@
 
 (defun recipes-ui ()
   (spinneret:with-html (:ul#recipes
-                        (dolist (recipe (get-recipes))
+                        (dolist (recipe (db:recipes))
                           (recipe-ui recipe)))))
 
 (defun recipe-add (name)
-  (let ((recipe (make-instance 'recipe :name name :description "")))
-    (mito:insert-dao recipe)
+  (let ((recipe (db:create-recipe :name name)))
     (recipe-ui recipe)))
 
-(defun recipe-delete (recipe-id)
-  (mito:delete-by-values 'recipe :id recipe-id ))
-(defun recipe-edit-form (recipe)
-  )
+(defun recipe-edit-form (recipe))
 
 (defun recipe-add-form ()
   (spinneret:with-html
@@ -106,14 +101,13 @@
 
 (defroute recipes (:delete ignored-type  &optional id &key (edit nil))
   (if id
-      (recipe-delete id)
+      (db:delete-recipe id)
       (snooze:http-condition 404 "no id provided")))
 
-(defun get-recipe (id)
-  (mito:find-dao 'recipe :id id))
 
 (defun recipe-show (id edit)
-  (let ((recipe (get-recipe id)))
+  (mito:ensure-table-exists 'recipe)
+  (let ((recipe (db:recipe-with-id id)))
     (cond ((and recipe edit)
            (main-layout (:p "editoi")))
           (recipe

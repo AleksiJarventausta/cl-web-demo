@@ -1,4 +1,4 @@
-(asdf:defsystem #:cl-web-demo
+(asdf:defsystem #:reseptit
   :description "Trying out htmx with common lisp"
   :license  "MIT"
   :version "0.0.1"
@@ -8,4 +8,4 @@
   :components ((:file "types")
                (:file "db")
                (:file "ui-utils")
-               (:file "cl-web-demo")))
+               (:file "reseptit")))

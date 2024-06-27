@@ -1,13 +1,13 @@
 (in-package :cl-user)
-(uiop:define-package :cl-web-demo/db
+(uiop:define-package :reseptit/db
   (:use :cl)
-  (:import-from :cl-web-demo/types
+  (:import-from :reseptit/types
                 #:recipe)
   (:export #:recipe-with-id
            #:recipes
            #:delete-recipe
            #:create-recipe))
-(in-package :cl-web-demo/db)
+(in-package :reseptit/db)
 
 
 (defun recipe-with-id (recipe-id)

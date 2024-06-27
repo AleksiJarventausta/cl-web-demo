@@ -1,5 +1,5 @@
 (in-package :cl-user)
-(uiop:define-package :cl-web-demo/types
+(uiop:define-package :reseptit/types
   (:use :cl)
   (:import-from :mito
                 #:deftable)
@@ -9,7 +9,7 @@
            #:recipe-id
            ))
 
-(in-package :cl-web-demo/types)
+(in-package :reseptit/types)
 
 (deftable recipe ()
    ((name :col-type (:varchar 256) )

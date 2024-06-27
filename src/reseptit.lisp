@@ -1,25 +1,28 @@
 
 (in-package :cl-user)
-(uiop:define-package :cl-web-demo
+(uiop:define-package :reseptit
   (:use :cl :lack.middleware.csrf)
-  (:LOCAL-NICKNAMES (#:db #:cl-web-demo/db))
+  (:LOCAL-NICKNAMES (#:db #:reseptit/db))
   (:import-from :snooze
                 #:*clack-request-env*
                 #:defresource
                 #:defroute)
 
-  (:import-from :cl-web-demo/types
+  (:import-from :reseptit/types
                 #:recipe
                 #:recipe-name)
-  (:import-from :cl-web-demo/ui-utils
+  (:import-from :reseptit/ui-utils
                 #:get-css)
   (:export #:start))
-(in-package :cl-web-demo)
+(in-package :reseptit)
 
 (defvar *server* nil )
 
 (setq spinneret::*print-pretty* T)
 (setq spinneret:*always-quote* T)
+
+(pushnew "hx-" spinneret:*unvalidated-attribute-prefixes* :test #'equal)
+
 (setq spinneret:*html-style* :tree)
 (setq snooze:*catch-errors* :verbose)
 
@@ -28,7 +31,7 @@
 
 
 (defun get-css (name)
-  (let ((css-mtime (sb-posix:stat-mtime (sb-posix:stat (asdf:system-relative-pathname :cl-web-demo (format nil "static-files/~a.css" name))))))
+  (let ((css-mtime (sb-posix:stat-mtime (sb-posix:stat (asdf:system-relative-pathname :reseptit (format nil "static-files/~a.css" name))))))
     (format nil "/public/~a.css?modified=~a" name css-mtime)))
 
 (defmacro main-layout (&body body)
@@ -43,28 +46,20 @@
          (:link :rel "stylesheet" :href ,missing-css)
          (:link :rel "stylesheet" :href ,main-css)
          (:script :src "/public/htmx.min.js"))
-        (:body :data-hx-headers (format nil "{\"X-CSRF-TOKEN\": \" ~a \"}" (csrf-token (getf *clack-request-env* :lack.session)))
+        (:body :hx-headers (format nil "{\"X-CSRF-TOKEN\": \" ~a \"}" (csrf-token (getf *clack-request-env* :lack.session)))
                (:main
                 ,@body))))))
 
 (defun htmx-page-link (uri text &optional class)
   (spinneret:with-html
-    (:a :href uri :data-hx-get uri :data-hx-push-url "true" :data-hx-target "body" :data-hx-swap "innerHTML" text)))
+    (:a :href uri :hx-boost "true"  :hx-target "body" :hx-swap "innerHTML" text)))
 
-(defun htmx-request? ()
-  (let ((hx-header (gethash  "hx-request" (lack.request:request-headers ningle:*request*))))
-    (string= "true" hx-header)))
-
-(defmacro htmx-layout (&body body)
-  `(if (htmx-request?)
-       (spinneret:with-html-string ,@body)
-       (main-layout ,@body)))
 
 (defun recipe-ui (recipe)
   (spinneret:with-html
     (:li.box.f-row.justify-content\:space-between
      (:p (recipe-name recipe))
-     (:button :data-hx-delete (recipes-path (mito:object-id recipe)) "Delete"))))
+     (:button :hx-delete (recipes-path (mito:object-id recipe)) "Delete"))))
 
 
 (defun recipes-ui ()
@@ -80,7 +75,7 @@
 
 (defun recipe-add-form ()
   (spinneret:with-html
-    (:form :data-hx-post "/recipes" :data-hx-target "#recipes" :data-hx-swap "beforeend"
+    (:form :hx-post "/recipes" :hx-target "#recipes" :hx-swap "beforeend"
            (:input#name :name "name")
            (:button :type "submit" "Submiti"))))
 
@@ -130,6 +125,6 @@
           :session
           (:csrf :header-name "X-CSRF-TOKEN")
           (:static :path "/public/"
-                   :root (asdf:system-relative-pathname :cl-web-demo #P"static-files/"))
+                   :root (asdf:system-relative-pathname :reseptit #P"static-files/"))
           (:mito '(:sqlite3 :database-name #P"/tmp/db.db"))
           (snooze:make-clack-app)))))

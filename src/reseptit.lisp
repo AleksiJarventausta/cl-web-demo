@@ -2,12 +2,13 @@
 (in-package :cl-user)
 (uiop:define-package :reseptit
   (:use :cl :lack.middleware.csrf)
-  (:LOCAL-NICKNAMES (#:db #:reseptit/db))
+  (:local-nicknames (#:db #:reseptit/db)
+                    (#:ui #:reseptit/ui)
+                    )
   (:import-from :snooze
                 #:*clack-request-env*
                 #:defresource
                 #:defroute)
-
   (:import-from :reseptit/types
                 #:recipe
                 #:recipe-name)
@@ -30,25 +31,7 @@
 (defresource recipes (verb ct &optional id &key edit) (:genpath recipes-path))
 
 
-(defun get-css (name)
-  (let ((css-mtime (sb-posix:stat-mtime (sb-posix:stat (asdf:system-relative-pathname :reseptit (format nil "static-files/~a.css" name))))))
-    (format nil "/public/~a.css?modified=~a" name css-mtime)))
 
-(defmacro main-layout (&body body)
-  (let ((main-css (get-css "main"))
-        (missing-css (get-css "missing.min")))
-    `(spinneret:with-html-string
-       (:doctype)
-       (:html
-        (:head
-         (:meta :charset "utf-8")
-         (:meta :name "viewport" :content "width=device-width, initial-scale=1")
-         (:link :rel "stylesheet" :href ,missing-css)
-         (:link :rel "stylesheet" :href ,main-css)
-         (:script :src "/public/htmx.min.js"))
-        (:body :hx-headers (format nil "{\"X-CSRF-TOKEN\": \" ~a \"}" (csrf-token (getf *clack-request-env* :lack.session)))
-               (:main
-                ,@body))))))
 
 (defun htmx-page-link (uri text &optional class)
   (spinneret:with-html
@@ -84,10 +67,11 @@
                                         ;          (main-layout (recipes-ui) (todo-add-form))))
 
 (defroute home (:get "text/html")
-  (main-layout (recipes-ui) (recipe-add-form)))
+  (ui:page (recipes-ui) (recipe-add-form)))
 
 (defun params ()
   (lack.request:request-body-parameters (lack.request:make-request *clack-request-env* )))
+
 
 (defroute recipes (:post :application/x-www-form-urlencoded &optional id &key (edit nil))
   (let ((req (params)))
@@ -104,16 +88,16 @@
   (mito:ensure-table-exists 'recipe)
   (let ((recipe (db:recipe-with-id id)))
     (cond ((and recipe edit)
-           (main-layout (:p "editoi")))
+           (ui:page (:p "editoi")))
           (recipe
-           (main-layout (:p "katso")))
+           (ui:page (:p "katso")))
           (t
-           (main-layout (:p "ei löytynyt"))))))
+           (ui:page (:p "ei löytynyt"))))))
 
 (defroute recipes (:get :text/html  &optional id &key (edit nil))
   (if id
       (recipe-show id edit)
-      (main-layout "kaikki")))
+      (ui:page "kaikki")))
 
 
 (defun start (&key (port 5000))

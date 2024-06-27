@@ -8,4 +8,5 @@
   :components ((:file "types")
                (:file "db")
                (:file "ui-utils")
+               (:file "ui")
                (:file "reseptit")))

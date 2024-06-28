@@ -1,0 +1,7 @@
+* {
+    --gap: 8px
+}
+
+#recipes li:hover {
+    background: var(--gray-4);
+}

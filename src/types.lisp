@@ -6,13 +6,9 @@
   (:export #:recipe
            #:recipe-name
            #:recipe-description
-           #:recipe-id
-           ))
-
+           #:recipe-id))
 (in-package :reseptit/types)
 
 (deftable recipe ()
    ((name :col-type (:varchar 256) )
-    (description :col-type :text)
-    )
-  )
+    (description :col-type :text)))

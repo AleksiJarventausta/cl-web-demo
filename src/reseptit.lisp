@@ -3,17 +3,19 @@
 (uiop:define-package :reseptit
   (:use :cl :lack.middleware.csrf)
   (:local-nicknames (#:db #:reseptit/db)
-                    (#:ui #:reseptit/ui)
-                    )
+                    (#:ui #:reseptit/ui))
   (:import-from :snooze
                 #:*clack-request-env*
                 #:defresource
                 #:defroute)
+  (:import-from :reseptit/utils
+                #:body-params
+                #:form-field
+                #:redirect-to)
   (:import-from :reseptit/types
                 #:recipe
+                #:recipe-description
                 #:recipe-name)
-  (:import-from :reseptit/ui-utils
-                #:get-css)
   (:export #:start))
 (in-package :reseptit)
 
@@ -31,66 +33,74 @@
 (defresource recipes (verb ct &optional id &key edit) (:genpath recipes-path))
 
 
-
-
 (defun htmx-page-link (uri text &optional class)
   (spinneret:with-html
     (:a :href uri :hx-boost "true"  :hx-target "body" :hx-swap "innerHTML" text)))
 
 
 (defun recipe-ui (recipe)
+  (let ((id (mito:object-id recipe))
+        (description (recipe-description recipe)))
   (spinneret:with-html
-    (:li.box.f-row.justify-content\:space-between
-     (:p (recipe-name recipe))
-     (:button :hx-delete (recipes-path (mito:object-id recipe)) "Delete"))))
+    (:li.box
+     (ui:link (recipes-path id )  (recipe-name recipe) :class "<h2>")
+     (if (string= description "")
+         (:p (:br))
+         (:p description))
+     (:div.f-row
+      (ui:link (recipes-path id :edit T) "edit"))))))
 
 
 (defun recipes-ui ()
-  (spinneret:with-html (:ul#recipes
-                        (dolist (recipe (db:recipes))
-                          (recipe-ui recipe)))))
+  (spinneret:with-html
+    (:ul.f-col.dense#recipes
+     :role "list"
+     (mapcar 'recipe-ui (db:recipes)))))
 
 (defun recipe-add (name)
   (let ((recipe (db:create-recipe :name name)))
     (recipe-ui recipe)))
 
-(defun recipe-edit-form (recipe))
+(defun recipe-edit-form (recipe)
+  (spinneret:with-html
+    (ui:form "Edit" :method "PATCH" :action (recipes-path (mito:object-id recipe))
+      (ui:input "name" (recipe-name recipe) "Name")
+      (ui:textarea "description" (recipe-description recipe) "Description")
+      (ui:form-submit-row "/"))))
 
 (defun recipe-add-form ()
   (spinneret:with-html
-    (:form :hx-post "/recipes" :hx-target "#recipes" :hx-swap "beforeend"
-           (:input#name :name "name")
-           (:button :type "submit" "Submiti"))))
+    (:form.f-row :hx-post "/recipes" :hx-target "#recipes" :hx-swap "beforeend"
+                 (:input.flex-grow\:1#name :name "name")
+                 (:button :type "submit" "Submit"))))
 
-                                        ;(setf (ningle:route *app* "/" :method :get)
-                                        ;      #'(lambda (params)
-                                        ;          (main-layout (recipes-ui) (todo-add-form))))
 
 (defroute home (:get "text/html")
   (ui:page (recipes-ui) (recipe-add-form)))
 
-(defun params ()
-  (lack.request:request-body-parameters (lack.request:make-request *clack-request-env* )))
 
 
 (defroute recipes (:post :application/x-www-form-urlencoded &optional id &key (edit nil))
-  (let ((req (params)))
+  (let ((params (body-params)))
     (spinneret:with-html-string
-      (recipe-add (cdr (assoc "name" req :test 'string=))))))
+      (recipe-add (form-field params "name")))))
 
 (defroute recipes (:delete ignored-type  &optional id &key (edit nil))
-  (if id
-      (db:delete-recipe id)
-      (snooze:http-condition 404 "no id provided")))
+  (cond (id
+         (db:delete-recipe id)
+         (spinneret:with-html-string (:p "Deleted!")))
+        (t (snooze:http-condition 404 "no id provided"))))
 
+(defun recipe-page (recipe)
+  (ui:page (:h1 (recipe-name recipe))
+    (:p (recipe-description recipe))))
 
 (defun recipe-show (id edit)
-  (mito:ensure-table-exists 'recipe)
   (let ((recipe (db:recipe-with-id id)))
     (cond ((and recipe edit)
-           (ui:page (:p "editoi")))
+           (ui:page (recipe-edit-form recipe)))
           (recipe
-           (ui:page (:p "katso")))
+           (recipe-page recipe))
           (t
            (ui:page (:p "ei löytynyt"))))))
 
@@ -98,6 +108,13 @@
   (if id
       (recipe-show id edit)
       (ui:page "kaikki")))
+
+(defroute recipes (:patch :application/x-www-form-urlencoded  &optional id &key (edit nil))
+  (let ((params (params)))
+    (cond ((and id params)
+           (db:update-recipe id params)
+           (redirect-to (recipes-path id)))
+          (t (snooze:http-condition 400 "No id provided")))))
 
 
 (defun start (&key (port 5000))

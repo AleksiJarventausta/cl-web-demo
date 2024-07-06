@@ -11,9 +11,11 @@
   (:export #:form-field
            #:redirect-to))
 (in-package :reseptit/utils)
-
 (defun form-field (params field)
   (assoc-value params field :test 'string=  ))
+
+(defun form-list-field (params field)
+  (mapcar 'cdr (remove field params :test-not #'string= :key #'car)))
 
 (defun redirect-to (uri)
   (setf (hunchentoot:header-out :location) uri)

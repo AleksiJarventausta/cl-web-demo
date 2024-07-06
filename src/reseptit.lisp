@@ -4,6 +4,8 @@
   (:use :cl :lack.middleware.csrf)
   (:local-nicknames (#:db #:reseptit/db)
                     (#:ui #:reseptit/ui))
+  (:import-from :reseptit/config
+                #:config)
   (:import-from :snooze
                 #:*clack-request-env*
                 #:defresource
@@ -15,7 +17,10 @@
   (:import-from :reseptit/types
                 #:recipe
                 #:recipe-description
-                #:recipe-name)
+                #:recipe-name
+                #:tag
+                #:tag-name
+                )
   (:export #:start))
 (in-package :reseptit)
 
@@ -33,22 +38,18 @@
 (defresource recipes (verb ct &optional id &key edit) (:genpath recipes-path))
 
 
-(defun htmx-page-link (uri text &optional class)
-  (spinneret:with-html
-    (:a :href uri :hx-boost "true"  :hx-target "body" :hx-swap "innerHTML" text)))
-
-
 (defun recipe-ui (recipe)
   (let ((id (mito:object-id recipe))
-        (description (recipe-description recipe)))
-  (spinneret:with-html
-    (:li.box
-     (ui:link (recipes-path id )  (recipe-name recipe) :class "<h2>")
-     (if (string= description "")
-         (:p (:br))
-         (:p description))
-     (:div.f-row
-      (ui:link (recipes-path id :edit T) "edit"))))))
+        (description (recipe-description recipe))
+        (tags (db:recipe-tags id)))
+    (spinneret:with-html
+      (:li.box.crowded
+       (ui:link (recipes-path id )  (recipe-name recipe) :class "<h2>")
+       (if (string= description "")
+           (:p (:br))
+           (:p description))
+       (:div.f-row
+        (ui:link (recipes-path id :edit T) "edit"))))))
 
 
 (defun recipes-ui ()
@@ -61,24 +62,27 @@
   (let ((recipe (db:create-recipe :name name)))
     (recipe-ui recipe)))
 
-(defun recipe-edit-form (recipe)
+(defun tag-option (tag)
   (spinneret:with-html
-    (ui:form "Edit" :method "PATCH" :action (recipes-path (mito:object-id recipe))
-      (ui:input "name" (recipe-name recipe) "Name")
-      (ui:textarea "description" (recipe-description recipe) "Description")
-      (ui:form-submit-row "/"))))
+    (:option :value (mito:object-id tag) (tag-name tag))))
+
+(defun recipe-edit-form (recipe)
+  (let ((form-id "recipe-form")
+        (tags (db:tags)))
+      (ui:form :id form-id :caption "Recipe" :method "PATCH" :action (recipes-path (mito:object-id recipe))
+        (ui:input :name "name" :label "Name" (recipe-name recipe))
+        (ui:select :multiple "true" :name "tags" :label "tags" (mapcar 'tag-option tags))
+        (ui:textarea :name "description" :label "Description" (recipe-description recipe)))))
 
 (defun recipe-add-form ()
   (spinneret:with-html
-    (:form.f-row :hx-post "/recipes" :hx-target "#recipes" :hx-swap "beforeend"
-                 (:input.flex-grow\:1#name :name "name")
-                 (:button :type "submit" "Submit"))))
+    (:form.f-row.packed :hx-post "/recipes" :hx-target "#recipes" :hx-swap "beforeend"
+                        (:input.flex-grow\:1#name :name "name")
+                        (:button :type "submit" "Submit"))))
 
 
 (defroute home (:get "text/html")
   (ui:page (recipes-ui) (recipe-add-form)))
-
-
 
 (defroute recipes (:post :application/x-www-form-urlencoded &optional id &key (edit nil))
   (let ((params (body-params)))
@@ -91,8 +95,16 @@
          (spinneret:with-html-string (:p "Deleted!")))
         (t (snooze:http-condition 404 "no id provided"))))
 
-(defun recipe-page (recipe)
-  (ui:page (:h1 (recipe-name recipe))
+(defun tag-chip (tag)
+  (spinneret:with-html
+    (:span.chip (tag-name tag))))
+
+(defun recipe-page (recipe tags)
+  (ui:page
+    (:div.f-row.justify-content\:space-between.align-items\:center
+     (:h1 (recipe-name recipe))
+     (ui:link (recipes-path (mito:object-id recipe) :edit T) "edit"))
+     (mapcar #'(lambda (tag) (:span.chip (tag-name tag))) tags)
     (:p (recipe-description recipe))))
 
 (defun recipe-show (id edit)
@@ -100,7 +112,7 @@
     (cond ((and recipe edit)
            (ui:page (recipe-edit-form recipe)))
           (recipe
-           (recipe-page recipe))
+           (recipe-page recipe (db:recipe-tags (mito:object-id recipe))))
           (t
            (ui:page (:p "ei löytynyt"))))))
 
@@ -110,7 +122,7 @@
       (ui:page "kaikki")))
 
 (defroute recipes (:patch :application/x-www-form-urlencoded  &optional id &key (edit nil))
-  (let ((params (params)))
+  (let ((params (body-params)))
     (cond ((and id params)
            (db:update-recipe id params)
            (redirect-to (recipes-path id)))
@@ -120,6 +132,7 @@
 (defun start (&key (port 5000))
   (when *server*
     (clack:stop *server*))
+  (db:init-db)
   (setf *server*
         (clack:clackup
          (lack:builder
@@ -127,5 +140,5 @@
           (:csrf :header-name "X-CSRF-TOKEN")
           (:static :path "/public/"
                    :root (asdf:system-relative-pathname :reseptit #P"static-files/"))
-          (:mito '(:sqlite3 :database-name #P"/tmp/db.db"))
+          (:mito (getf (config) :database-config))
           (snooze:make-clack-app)))))

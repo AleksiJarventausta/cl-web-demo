@@ -4,8 +4,9 @@
   :version "0.0.1"
   :pathname "src"
   :serial t
-  :depends-on (#:clack #:ningle #:spinneret #:alexandria "snooze" #:bknr.datastore "lack-middleware-csrf" "mito")
-  :components ((:file "types")
+  :depends-on (#:clack #:hunchentoot #:ningle #:spinneret #:alexandria "snooze" #:bknr.datastore "lack-middleware-csrf" "mito" "envy")
+  :components ((:file "config")
+               (:file "types")
                (:file "utils")
                (:file "db")
                (:file "ui-utils")

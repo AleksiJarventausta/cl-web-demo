@@ -11,6 +11,7 @@
   (:export #:page
            #:link
            #:input
+           #:select
            #:form
            #:form-submit-row
            #:textarea))
@@ -19,32 +20,46 @@
 
 (defmacro link (href text &body body)
   `(spinneret:with-html
-    (:a :href ,href :hx-select "main" :hx-target "main" :hx-swap "outerHTML" ,@body ,text)))
+     (:a :href ,href :hx-select "main" :hx-target "main" :hx-swap "outerHTML" ,@body ,text)))
 
-(defun input (name value text &key (type "text") )
-  (spinneret:with-html
-  (:p
-   (:label :for name text)
-   (:input :id name :name name :value value :type type))))
+(spinneret:deftag input (default attrs  &key name label (type "text") )
+  (alexandria:once-only (name)
+    `(progn (:p
+             (:label :for ,name ,label)
+             (:input :id ,name :name ,name :type ,type
+               ,@attrs
+               :value (progn ,@default))))))
 
-(defun form-submit-row (cancel-uri)
-  (spinneret:with-html
-    (:section.tool-bar
-     (:button :type "button" :hx-push-url "true" :hx-get cancel-uri :hx-select "main" :hx-target "main" :hx-swap "outerHTML" "Cancel")
-     (:button :type "submit" "Submit"))))
+(spinneret:deftag select (default attrs &key name label)
+  (alexandria:once-only (name)
+    `(progn
+       (:p
+        (:label :for ,name ,label)
+        (:select :id ,name :name ,name ,@attrs (progn ,@default)))
+       )
+    )
+  )
 
-(defmacro form (title &body body)
-  `(spinneret:with-html
-    (:figure
-     (:figcaption ,title)
-     (:form.table.rows :hx-target "main" :hx-select "main" :hx-swap "outerHTML" ,@body))))
+(spinneret:deftag form (default attrs &key caption id (cancel-action "/"))
+  (alexandria:once-only (id)
+    `(progn
+       (:figure
+        (:figcaption.<h2> ,caption)
+        (:form.table.rows :id ,id :hx-target "main" :hx-select "main" :hx-swap "outerHTML"
+                          ,@attrs
+                          (progn ,@default))
+        (:section.tool-bar
+         (:a.<button> :hx-push-url "true" :hx-get ,cancel-action :hx-select "main" :hx-target "main" :hx-swap "outerHTML" "Cancel")
+         (:strong
+          (:button :form ,id :type "submit" "Submit")))))))
 
 
-(defun textarea (name value text )
-  (spinneret:with-html
-  (:p
-   (:label :for name text)
-   (:textarea :id name :name name value))))
+(spinneret:deftag textarea (default attrs &key name label (rows 4) )
+  (alexandria:once-only (name)
+    `(progn
+       (:p
+        (:label :for ,name ,label)
+        (:textarea :id ,name :name ,name :rows ,rows ,@attrs (progn ,@default))))))
 
 (defmacro page (&body body)
   (let ((main-css (get-css "main"))
@@ -61,9 +76,9 @@
 
         (:body :hx-headers (format nil "{\"X-CSRF-TOKEN\": \" ~a \"}" (csrf-token (getf *clack-request-env* :lack.session)))
                :hx-boost "true"
-            (:header.navbar
-             (:nav :aria-label "Page links"
-               (:ul :role "list"
-                (:li (link "/" "Home")))))
-            (:main
+               (:header.navbar
+                (:nav :aria-label "Page links"
+                      (:ul :role "list"
+                           (:li (link "/" "Home")))))
+               (:main
                 ,@body))))))

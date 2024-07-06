@@ -1,7 +1,21 @@
-* {
-    --gap: 8px
-}
 
 #recipes li:hover {
     background: var(--gray-4);
+}
+
+header {
+    margin-block: unset;
+}
+
+input,
+textarea {
+    width:190px;
+}
+
+
+@media screen and (max-width: 600px) {
+    main {
+        margin: 0;
+        max-inline-size: unset;
+    }
 }
